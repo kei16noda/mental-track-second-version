@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>週次メンタルトラッカー</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root {
+  --primary:#6366f1;--primary-light:#818cf8;--primary-dark:#4338ca;
+  --bg:#f4f4ff;--surface:#fff;--surface-alt:#f8f9ff;
+  --text:#1e1b4b;--text-secondary:#6b7280;--border:#e5e7eb;
+  --success:#10b981;--warning:#f59e0b;--danger:#ef4444;
+  --shadow:0 1px 3px rgba(0,0,0,.08);--shadow-md:0 4px 12px rgba(0,0,0,.1);
+  --radius:14px;
+}
+@media(prefers-color-scheme:dark){
+  :root{
+    --bg:#0f0e1a;--surface:#1a1928;--surface-alt:#221f35;
+    --text:#e2e2f0;--text-secondary:#9ca3af;--border:#2d2b45;
+    --shadow:0 1px 3px rgba(0,0,0,.3);--shadow-md:0 4px 12px rgba(0,0,0,.4);
+  }
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Hiragino Kaku Gothic ProN','Meiryo',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:15px;line-height:1.65;}
+
+/* HEADER */
+.header{background:linear-gradient(135deg,#4338ca,#6366f1 60%,#818cf8);color:#fff;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;box-shadow:var(--shadow-md);position:sticky;top:0;z-index:100;}
+.header-left{display:flex;align-items:center;gap:8px;min-width:0;flex-wrap:wrap;}
+.header h1{font-size:16px;font-weight:700;white-space:nowrap;}
+.week-pill{font-size:11px;background:rgba(255,255,255,.22);padding:3px 10px;border-radius:20px;white-space:nowrap;cursor:pointer;border:none;color:#fff;font-family:inherit;transition:background .15s;}
+.week-pill:hover{background:rgba(255,255,255,.32);}
+.week-pill.other-week{background:rgba(255,200,0,.35);}
+.streak-badge{font-size:11px;background:rgba(255,255,255,.18);padding:3px 9px;border-radius:20px;white-space:nowrap;}
+.header-actions{display:flex;gap:6px;flex-shrink:0;}
+.icon-btn{background:rgba(255,255,255,.18);border:none;color:#fff;width:30px;height:30px;border-radius:7px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;transition:background .15s;}
+.icon-btn:hover{background:rgba(255,255,255,.3);}
+
+/* CALENDAR */
+.cal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.25);display:none;align-items:flex-start;justify-content:center;z-index:300;padding-top:58px;}
+.cal-backdrop.open{display:flex;}
+.cal-popup{background:var(--surface);border-radius:var(--radius);padding:16px;width:296px;box-shadow:0 12px 40px rgba(0,0,0,.2);}
+.cal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+.cal-nav{background:none;border:none;font-size:20px;cursor:pointer;padding:2px 10px;border-radius:6px;color:var(--text);line-height:1;}
+.cal-nav:hover{background:var(--bg);}
+.cal-month-lbl{font-weight:700;font-size:14px;}
+.cal-wd{display:grid;grid-template-columns:repeat(7,1fr) 18px;text-align:center;font-size:11px;color:var(--text-secondary);margin-bottom:3px;}
+.cal-week-row{display:grid;grid-template-columns:repeat(7,1fr) 18px;align-items:center;border-radius:7px;cursor:pointer;padding:2px 0;margin-bottom:1px;transition:background .12s;}
+.cal-week-row:hover{background:#eff0fe;}
+.cal-week-row.cal-selected{background:rgba(99,102,241,.15);}
+.cal-week-row.cal-current{outline:2px solid var(--primary);outline-offset:-1px;}
+.cal-day{text-align:center;font-size:12px;padding:4px 1px;line-height:1.6;}
+.cal-day.other-month{opacity:.3;}
+.cal-day.is-today{background:var(--primary);color:#fff;border-radius:50%;}
+.cal-dot{font-size:8px;color:var(--success);text-align:center;}
+
+/* TABS */
+.tab-nav{display:flex;background:var(--surface);border-bottom:1px solid var(--border);padding:0 6px;overflow-x:auto;scrollbar-width:none;position:sticky;top:53px;z-index:99;box-shadow:0 1px 3px rgba(0,0,0,.05);}
+.tab-nav::-webkit-scrollbar{display:none;}
+.tab-btn{padding:11px 14px;border:none;background:none;color:var(--text-secondary);font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap;position:relative;transition:color .15s;font-family:inherit;}
+.tab-btn.active{color:var(--primary);}
+.tab-btn.active::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:var(--primary);border-radius:2px 2px 0 0;}
+
+/* LAYOUT */
+.main{max-width:680px;margin:0 auto;padding:16px 13px 56px;}
+.tab-content{display:none;}
+.tab-content.active{display:block;}
+
+/* CARDS */
+.card{background:var(--surface);border-radius:var(--radius);padding:18px;margin-bottom:14px;box-shadow:var(--shadow);}
+.card-title{font-size:15px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:8px;}
+.card-icon{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:15px;background:var(--bg);flex-shrink:0;}
+.section-label{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-secondary);margin-bottom:10px;}
+
+/* PREV GOAL BANNER */
+.prev-goal-card{background:#eff6ff;border:1px solid #bfdbfe;border-radius:var(--radius);padding:14px 16px;margin-bottom:14px;}
+@media(prefers-color-scheme:dark){.prev-goal-card{background:#1e2a3a;border-color:#2563eb44;}}
+.prev-goal-title{font-size:12px;font-weight:700;color:#1d4ed8;margin-bottom:4px;}
+.prev-goal-content{font-size:13px;margin-bottom:10px;line-height:1.6;}
+.goal-rating-row{display:flex;gap:7px;flex-wrap:wrap;}
+.goal-rating-btn{padding:5px 13px;border:1.5px solid var(--border);border-radius:20px;font-size:12px;cursor:pointer;background:var(--surface);color:var(--text-secondary);transition:all .14s;font-family:inherit;}
+.goal-rating-btn.selected{border-color:#1d4ed8;background:rgba(29,78,216,.1);color:#1d4ed8;}
+
+/* SLIDERS */
+.slider-item{margin-bottom:14px;}
+.slider-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;}
+.slider-label{font-size:14px;font-weight:500;}
+.slider-value{font-size:14px;font-weight:700;color:var(--primary);min-width:55px;text-align:right;}
+input[type="range"]{-webkit-appearance:none;width:100%;height:7px;border-radius:4px;outline:none;cursor:pointer;background:var(--border);}
+input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:var(--primary);cursor:pointer;box-shadow:0 2px 6px rgba(99,102,241,.35);transition:transform .1s;}
+input[type="range"]::-webkit-slider-thumb:hover{transform:scale(1.2);}
+.slider-ends{display:flex;justify-content:space-between;margin-top:3px;}
+.slider-ends span{font-size:11px;color:var(--text-secondary);}
+
+/* STRESS TAGS */
+.tag-row{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:8px;}
+.stress-tag{padding:5px 13px;border:1.5px solid var(--border);border-radius:20px;font-size:12px;font-weight:500;cursor:pointer;background:var(--surface);color:var(--text-secondary);transition:all .14s;user-select:none;}
+.stress-tag.selected{border-color:var(--primary);background:rgba(99,102,241,.1);color:var(--primary);}
+.other-input{width:100%;padding:8px 11px;border:1.5px solid var(--primary-light);border-radius:9px;font-size:13px;font-family:inherit;background:var(--surface-alt);color:var(--text);margin-bottom:8px;display:none;}
+.other-input:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(99,102,241,.08);}
+.other-input.visible{display:block;}
+
+/* TEXT */
+.text-group{margin-bottom:14px;}
+.text-label{font-size:14px;font-weight:600;display:block;margin-bottom:2px;}
+.text-hint{font-size:12px;color:var(--text-secondary);display:block;margin-bottom:6px;}
+textarea,.text-input{width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:14px;font-family:inherit;color:var(--text);resize:vertical;background:var(--surface-alt);transition:border-color .15s,background .15s;line-height:1.65;}
+textarea{min-height:76px;}
+textarea:focus,.text-input:focus{outline:none;border-color:var(--primary-light);background:var(--surface);box-shadow:0 0 0 3px rgba(99,102,241,.08);}
+
+/* BUTTONS */
+.btn{padding:9px 17px;border:none;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:5px;font-family:inherit;}
+.btn-primary{background:var(--primary);color:#fff;}
+.btn-primary:hover{background:var(--primary-dark);transform:translateY(-1px);box-shadow:0 4px 12px rgba(99,102,241,.3);}
+.btn-success{background:var(--success);color:#fff;}
+.btn-success:hover{background:#059669;transform:translateY(-1px);}
+.btn-danger{background:var(--danger);color:#fff;}
+.btn-danger:hover{background:#dc2626;transform:translateY(-1px);}
+.btn-secondary{background:var(--surface);color:var(--text);border:1.5px solid var(--border);}
+.btn-secondary:hover{background:var(--bg);}
+.btn-sm{padding:6px 12px;font-size:12px;}
+.btn:disabled{opacity:.45;cursor:not-allowed;transform:none!important;box-shadow:none!important;}
+.btn-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;}
+@keyframes savePop{0%{transform:scale(1)}40%{transform:scale(1.07)}100%{transform:scale(1)}}
+.save-pop{animation:savePop .35s ease;}
+
+/* SCORE GRID */
+.score-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px;}
+.score-cell{background:var(--surface-alt);border-radius:10px;padding:10px 8px;text-align:center;}
+.score-cell .num{font-size:22px;font-weight:800;line-height:1;}
+.score-cell .lbl{font-size:10px;color:var(--text-secondary);margin-top:3px;line-height:1.3;}
+
+/* CHARTS */
+.chart-wrap{position:relative;width:100%;height:280px;}
+.chart-wrap.radar{height:300px;}
+.period-row{display:flex;gap:7px;margin-bottom:14px;flex-wrap:wrap;}
+.period-btn{padding:5px 14px;border:1.5px solid var(--border);border-radius:20px;background:var(--surface);font-size:12px;font-weight:500;cursor:pointer;color:var(--text-secondary);transition:all .15s;font-family:inherit;}
+.period-btn.active{border-color:var(--primary);color:var(--primary);background:rgba(99,102,241,.06);}
+.perma-note{background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 13px;font-size:12px;color:#1d4ed8;line-height:1.55;margin-bottom:14px;}
+@media(prefers-color-scheme:dark){.perma-note{background:#1e2a3a;border-color:#2563eb44;color:#93c5fd;}}
+
+/* LOG */
+.log-item{background:var(--surface);border-radius:var(--radius);margin-bottom:10px;overflow:hidden;box-shadow:var(--shadow);}
+.log-header{padding:13px 15px;display:flex;justify-content:space-between;align-items:flex-start;cursor:pointer;user-select:none;transition:background .12s;gap:10px;}
+.log-header:hover{background:var(--surface-alt);}
+.log-title{font-size:14px;font-weight:600;}
+.log-sub{font-size:11px;color:var(--text-secondary);margin-top:2px;}
+.score-badges{display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;}
+.s-badge{font-size:11px;padding:2px 7px;border-radius:20px;background:var(--bg);font-weight:600;white-space:nowrap;}
+.log-body{display:none;padding:0 15px 14px;border-top:1px solid var(--border);}
+.log-body.open{display:block;}
+.log-sect{margin-top:12px;}
+.log-sect h4{font-size:11px;font-weight:700;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;}
+.log-sect p{font-size:13px;line-height:1.7;}
+.stress-badges{display:flex;flex-wrap:wrap;gap:5px;}
+.stress-badge{font-size:11px;padding:2px 9px;border-radius:12px;background:rgba(99,102,241,.1);color:var(--primary);font-weight:500;}
+
+/* PROMPT TAB */
+.prompt-template-area{width:100%;min-height:200px;padding:12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;font-family:'Courier New',monospace;color:var(--text);background:var(--surface-alt);line-height:1.7;resize:vertical;}
+.prompt-template-area:focus{outline:none;border-color:var(--primary-light);background:var(--surface);}
+.prompt-output{width:100%;min-height:220px;padding:12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;font-family:'Courier New',monospace;color:var(--text-secondary);background:var(--surface-alt);line-height:1.7;resize:vertical;}
+.how-to-note{background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px 13px;font-size:12px;color:#166534;line-height:1.55;margin-top:10px;}
+@media(prefers-color-scheme:dark){.how-to-note{background:#14291e;border-color:#16a34a44;color:#86efac;}}
+
+/* IMPORT */
+.import-zone{border:2px dashed var(--border);border-radius:var(--radius);padding:20px;text-align:center;cursor:pointer;transition:all .15s;margin-bottom:14px;}
+.import-zone:hover{border-color:var(--primary-light);background:rgba(99,102,241,.03);}
+.import-zone p{font-size:13px;color:var(--text-secondary);margin-top:6px;}
+
+/* DIALOG */
+.dialog-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;z-index:700;padding:20px;}
+.dialog-backdrop.open{display:flex;}
+.dialog{background:var(--surface);border-radius:var(--radius);padding:22px 20px;max-width:340px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.25);}
+.dialog h3{font-size:16px;font-weight:700;margin-bottom:8px;}
+.dialog p{font-size:13px;color:var(--text-secondary);line-height:1.6;margin-bottom:14px;}
+.dialog-btns{display:flex;gap:8px;justify-content:flex-end;}
+.dialog-input{width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:14px;font-family:inherit;background:var(--surface-alt);color:var(--text);margin-bottom:14px;}
+.dialog-input:focus{outline:none;border-color:var(--primary-light);}
+
+/* MISC */
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:#1e1b4b;color:#fff;padding:9px 20px;border-radius:24px;font-size:13px;font-weight:500;transition:transform .25s ease;z-index:600;box-shadow:var(--shadow-md);white-space:nowrap;}
+.toast.show{transform:translateX(-50%) translateY(0);}
+.empty-state{text-align:center;padding:40px 20px;color:var(--text-secondary);}
+.empty-icon{font-size:44px;margin-bottom:10px;}
+.empty-state p{font-size:13px;line-height:1.7;}
+.divider{border:none;border-top:1px solid var(--border);margin:14px 0;}
+.user-chip{font-size:11px;background:rgba(255,255,255,.18);padding:3px 9px;border-radius:20px;white-space:nowrap;}
+
+@media(max-width:460px){.score-grid{grid-template-columns:repeat(2,1fr);}.header h1{font-size:14px;}}
+</style>
+</head>
+<body>
+<div class="toast" id="toast"></div>
+
+<!-- User setup modal -->
+<div class="dialog-backdrop open" id="user-modal">
+  <div class="dialog">
+    <h3>🧠 ようこそ</h3>
+    <p>このアプリを使うユーザー名を設定してください。<br>複数人で使う場合は別々の名前を設定するとデータが分かれます。</p>
+    <input type="text" class="dialog-input" id="username-input" placeholder="例：たけし" maxlength="20">
+    <div class="dialog-btns">
+      <button class="btn btn-primary" onclick="setupUser()">はじめる</button>
+    </div>
+  </div>
+</div>
+
+<!-- Calendar -->
+<div class="cal-backdrop" id="cal-backdrop" onclick="closeWeekPicker()">
+  <div class="cal-popup" onclick="event.stopPropagation()">
+    <div class="cal-header">
+      <button class="cal-nav" onclick="calChangeMonth(-1)">‹</button>
+      <span class="cal-month-lbl" id="cal-month-lbl"></span>
+      <button class="cal-nav" onclick="calChangeMonth(1)">›</button>
+    </div>
+    <div class="cal-wd"><span>月</span><span>火</span><span>水</span><span>木</span><span>金</span><span>土</span><span>日</span><span></span></div>
+    <div id="cal-grid"></div>
+    <div style="text-align:center;margin-top:10px;">
+      <button class="btn btn-secondary btn-sm" onclick="selectWeek(nowWeekKey())">今週に戻る</button>
+    </div>
+  </div>
+</div>
+
+<!-- Dialogs -->
+<div class="dialog-backdrop" id="reset-dialog">
+  <div class="dialog">
+    <h3>↺ フォームをリセット</h3>
+    <p>入力中の内容をクリアします。保存済みデータは消えません（過去ログで確認できます）。</p>
+    <div class="dialog-btns">
+      <button class="btn btn-secondary btn-sm" onclick="closeDialog('reset-dialog')">キャンセル</button>
+      <button class="btn btn-danger btn-sm" onclick="doReset()">リセット</button>
+    </div>
+  </div>
+</div>
+<div class="dialog-backdrop" id="share-dialog">
+  <div class="dialog">
+    <h3>🔗 アプリをシェア</h3>
+    <p>このアプリはHTMLファイル形式です。<br><br>📁 <strong>ファイルをそのまま渡す</strong>ことで相手も使えます。データは各自のブラウザに保存されるため、ファイルを渡しても自分のデータは見えません。<br><br>🌐 URL でシェアしたい場合は GitHub Pages 等にホスティングしてください。</p>
+    <div class="dialog-btns">
+      <button class="btn btn-secondary btn-sm" onclick="closeDialog('share-dialog')">閉じる</button>
+    </div>
+  </div>
+</div>
+<div class="dialog-backdrop" id="switch-user-dialog">
+  <div class="dialog">
+    <h3>👤 ユーザー切り替え</h3>
+    <p>新しいユーザー名を入力してください。既存ユーザー名を入力するとそのデータに切り替わります。</p>
+    <input type="text" class="dialog-input" id="switch-username-input" placeholder="ユーザー名" maxlength="20">
+    <div class="dialog-btns">
+      <button class="btn btn-secondary btn-sm" onclick="closeDialog('switch-user-dialog')">キャンセル</button>
+      <button class="btn btn-primary btn-sm" onclick="doSwitchUser()">切り替え</button>
+    </div>
+  </div>
+</div>
+<div class="dialog-backdrop" id="delete-all-dialog">
+  <div class="dialog">
+    <h3>⚠️ 全データを削除</h3>
+    <p>このユーザーのすべての記録を削除します。元に戻せません。</p>
+    <div class="dialog-btns">
+      <button class="btn btn-secondary btn-sm" onclick="closeDialog('delete-all-dialog')">キャンセル</button>
+      <button class="btn btn-danger btn-sm" onclick="doDeleteAll()">削除する</button>
+    </div>
+  </div>
+</div>
+
+<!-- Header -->
+<header class="header">
+  <div class="header-left">
+    <h1>🧠 メンタルトラッカー</h1>
+    <button class="week-pill" id="week-display" onclick="openWeekPicker()"></button>
+    <span class="streak-badge" id="streak-badge" style="display:none;"></span>
+  </div>
+  <div class="header-actions">
+    <button class="icon-btn" title="シェア" onclick="openDialog('share-dialog')">🔗</button>
+    <button class="icon-btn" title="リセット" onclick="openDialog('reset-dialog')">↺</button>
+  </div>
+</header>
+
+<!-- Tabs -->
+<nav class="tab-nav">
+  <button class="tab-btn active" onclick="switchTab('input')">📝 入力</button>
+  <button class="tab-btn" onclick="switchTab('prompt')">🤖 AIへ相談</button>
+  <button class="tab-btn" onclick="switchTab('chart')">📊 グラフ</button>
+  <button class="tab-btn" onclick="switchTab('log')">📋 過去ログ</button>
+  <button class="tab-btn" onclick="switchTab('data')">⚙️ データ</button>
+</nav>
+
+<main class="main">
+
+  <!-- INPUT TAB -->
+  <div id="tab-input" class="tab-content active">
+    <!-- Previous week goal banner -->
+    <div class="prev-goal-card" id="prev-goal-banner" style="display:none;">
+      <p class="prev-goal-title">🎯 前週の目標</p>
+      <p class="prev-goal-content" id="prev-goal-text"></p>
+      <p style="font-size:12px;color:var(--text-secondary);margin-bottom:8px;">今週、達成できましたか？</p>
+      <div class="goal-rating-row">
+        <button class="goal-rating-btn" data-val="done" onclick="setGoalRating(this)">✅ できた</button>
+        <button class="goal-rating-btn" data-val="partial" onclick="setGoalRating(this)">🔶 まあまあ</button>
+        <button class="goal-rating-btn" data-val="not" onclick="setGoalRating(this)">❌ できなかった</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">
+        <div class="card-icon">📅</div>
+        <span id="input-title">今週の記録（新規）</span>
+      </div>
+
+      <p class="section-label">定量評価（1〜5）</p>
+      <div id="sliders"></div>
+
+      <hr class="divider">
+      <p class="section-label">定性記録</p>
+
+      <div class="text-group">
+        <label class="text-label">📌 今週の出来事（事実）</label>
+        <span class="text-hint">感情は入れずに、起きたことだけ書いてみましょう。</span>
+        <textarea id="t-events" placeholder="例：月曜に発表があった。水曜は友人とランチした。"></textarea>
+      </div>
+      <div class="text-group">
+        <label class="text-label">✨ 良かった瞬間</label>
+        <span class="text-hint">今週いちばん嬉しかった・充実した瞬間を。</span>
+        <textarea id="t-peaks" placeholder="例：発表が褒められた。久しぶりに友人と笑えた。" style="min-height:68px;"></textarea>
+      </div>
+
+      <hr class="divider">
+      <p class="section-label">ストレス要因</p>
+      <div class="tag-row" id="stress-tags">
+        <span class="stress-tag" onclick="toggleTag(this)" data-tag="仕事・勉強">📚 仕事・勉強</span>
+        <span class="stress-tag" onclick="toggleTag(this)" data-tag="人間関係">🤝 人間関係</span>
+        <span class="stress-tag" onclick="toggleTag(this)" data-tag="健康・身体">🏃 健康・身体</span>
+        <span class="stress-tag" onclick="toggleTag(this)" data-tag="将来・キャリア">🎯 将来・キャリア</span>
+        <span class="stress-tag" onclick="toggleTag(this)" data-tag="金銭">💰 金銭</span>
+        <span class="stress-tag" onclick="toggleTag(this)" data-tag="家族">🏠 家族</span>
+        <span class="stress-tag" onclick="toggleTag(this,'other')" data-tag="その他">💭 その他</span>
+        <span class="stress-tag" onclick="toggleTag(this)" data-tag="特になし">✨ 特になし</span>
+      </div>
+      <input type="text" class="other-input" id="other-input" placeholder="その他のストレス要因を入力...">
+      <div class="text-group">
+        <label class="text-label">📝 ストレスの具体</label>
+        <span class="text-hint">どんな状況でストレスを感じましたか？できるだけ具体的に。</span>
+        <textarea id="t-stress-detail" placeholder="例：締め切りが重なって焦りが続いた。"></textarea>
+      </div>
+
+      <div class="text-group">
+        <label class="text-label">🔍 自分なりの解釈 <span style="font-size:11px;color:var(--text-secondary);font-weight:400;">（省略可）</span></label>
+        <span class="text-hint">なぜそう感じたか。自分の中でどう意味づけしているか。</span>
+        <textarea id="t-interp" placeholder="例：睡眠不足が続いていたから感情が揺れやすかったのかも。" style="min-height:68px;"></textarea>
+      </div>
+      <div class="text-group">
+        <label class="text-label">🛠 今週使った対処法</label>
+        <span class="text-hint">気持ちがしんどいとき、どうやって乗り切りましたか？</span>
+        <textarea id="t-coping" placeholder="例：散歩した、音楽を聴いた、友達に話した。"></textarea>
+      </div>
+      <div class="text-group">
+        <label class="text-label">🌱 来週試したいこと</label>
+        <span class="text-hint">小さなことで大丈夫。できるだけ具体的に。</span>
+        <textarea id="t-next" placeholder="例：30分早く寝る、昼休みに5分だけ外に出る。"></textarea>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-success" id="save-btn" onclick="saveEntry()">💾 保存する</button>
+        <button class="btn btn-secondary" onclick="shareResult()">📤 結果をシェア</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PROMPT TAB -->
+  <div id="tab-prompt" class="tab-content">
+    <div class="card">
+      <div class="card-title"><div class="card-icon">📝</div>プロンプトテンプレート</div>
+      <p style="font-size:12px;color:var(--text-secondary);margin-bottom:10px;">このテンプレートは自由に編集できます。変更は自動保存されます。</p>
+      <textarea class="prompt-template-area" id="prompt-template" oninput="saveTemplate()"></textarea>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><div class="card-icon">📋</div>プロンプトを生成</div>
+      <p style="font-size:13px;color:var(--text-secondary);margin-bottom:10px;">どの週のデータを使いますか？</p>
+      <select id="prompt-week-select" style="width:100%;padding:8px 11px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:var(--surface-alt);color:var(--text);font-family:inherit;margin-bottom:12px;"></select>
+      <button class="btn btn-primary btn-sm" onclick="buildPromptOutput()">📋 プロンプトを生成</button>
+    </div>
+
+    <div class="card" id="prompt-output-card" style="display:none;">
+      <div class="card-title"><div class="card-icon">✅</div>完成したプロンプト</div>
+      <textarea class="prompt-output" id="prompt-output" readonly></textarea>
+      <div class="btn-row">
+        <button class="btn btn-primary btn-sm" onclick="copyPrompt()">📋 コピー</button>
+      </div>
+      <div class="how-to-note">💡 このプロンプトをコピーして、Claude・ChatGPT などのチャットに貼り付けてください。APIキーは不要です。</div>
+    </div>
+  </div>
+
+  <!-- CHART TAB -->
+  <div id="tab-chart" class="tab-content">
+    <div class="card">
+      <div class="card-title"><div class="card-icon">📈</div>スコアの時系列推移</div>
+      <div class="period-row">
+        <button class="period-btn active" onclick="setPeriod(4,this)">直近4週</button>
+        <button class="period-btn" onclick="setPeriod(12,this)">直近12週</button>
+        <button class="period-btn" onclick="setPeriod(0,this)">全期間</button>
+      </div>
+      <div class="chart-wrap"><canvas id="line-chart"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><div class="card-icon">🌐</div>PERMAレーダー（最新週）</div>
+      <div class="perma-note"><strong>PERMAとは？</strong> 心理学者セリグマンが提唱した幸福の5要素。P（ポジティブ感情）E（没頭）R（人間関係）M（意義）A（達成）</div>
+      <div class="chart-wrap radar"><canvas id="radar-chart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- LOG TAB -->
+  <div id="tab-log" class="tab-content">
+    <div id="log-list"></div>
+  </div>
+
+  <!-- DATA TAB -->
+  <div id="tab-data" class="tab-content">
+    <div class="card">
+      <div class="card-title"><div class="card-icon">👤</div>ユーザー設定</div>
+      <p style="font-size:13px;margin-bottom:10px;">現在のユーザー: <strong id="current-user-label"></strong></p>
+      <button class="btn btn-secondary btn-sm" onclick="openSwitchUserDialog()">👤 ユーザーを切り替える</button>
+    </div>
+    <div class="card">
+      <div class="card-title"><div class="card-icon">📤</div>エクスポート</div>
+      <p style="font-size:13px;color:var(--text-secondary);margin-bottom:12px;">すべての記録をJSONファイルとして保存します。</p>
+      <button class="btn btn-secondary" onclick="exportJSON()">📤 JSONエクスポート</button>
+    </div>
+    <div class="card">
+      <div class="card-title"><div class="card-icon">📥</div>インポート</div>
+      <p style="font-size:13px;color:var(--text-secondary);margin-bottom:12px;">エクスポートしたJSONを読み込みます。同じ週はインポート側で上書きされます。</p>
+      <div class="import-zone" onclick="document.getElementById('import-file-input').click()">
+        <div style="font-size:28px;">📂</div>
+        <p>クリックしてJSONファイルを選択</p>
+      </div>
+      <input type="file" id="import-file-input" accept=".json" style="display:none" onchange="importJSON(event)">
+    </div>
+    <div class="card" style="border:1.5px solid #fecaca;">
+      <div class="card-title" style="color:var(--danger);"><div class="card-icon">⚠️</div>データ削除</div>
+      <p style="font-size:13px;color:var(--text-secondary);margin-bottom:12px;">このユーザーのすべての記録を削除します。</p>
+      <button class="btn btn-danger btn-sm" onclick="openDialog('delete-all-dialog')">🗑 全データを削除</button>
+    </div>
+  </div>
+
+</main>
+
+<script>
+// ============================================================
+// 定数
+// ============================================================
+const FIELDS = [
+  {id:'mood',label:'全体的な気分',emoji:'😊',lo:'最悪',hi:'最高'},
+  {id:'energy',label:'エネルギー・活力',emoji:'⚡',lo:'ぐったり',hi:'元気いっぱい'},
+  {id:'sleep',label:'睡眠の質',emoji:'😴',lo:'眠れなかった',hi:'よく眠れた'},
+  {id:'connection',label:'人とのつながり感',emoji:'🤝',lo:'孤独だった',hi:'充実していた'},
+  {id:'engagement',label:'何かに没頭できたか',emoji:'🎯',lo:'まったくなかった',hi:'十分できた'},
+  {id:'productivity',label:'やるべきことへの取り組み',emoji:'✅',lo:'できなかった',hi:'よくできた'},
+];
+const COLORS={mood:'#6366f1',energy:'#f59e0b',sleep:'#10b981',connection:'#ef4444',engagement:'#8b5cf6',productivity:'#06b6d4'};
+const PERMA_MAP=['mood','engagement','connection','productivity','energy'];
+const PERMA_LABELS=[['P','ポジティブ感情'],['E','没頭'],['R','人間関係'],['M','意義・意味'],['A','達成感']];
+
+const DEFAULT_TEMPLATE = `# 役割
+あなたは心理的セルフモニタリングをサポートする専門的なアシスタントです。
+
+# タスク
+以下の週次セルフレポートを読み、建設的で温かいフィードバックを日本語で提供してください。
+
+# フィードバックの観点
+1. 気づきのポイント：思考パターンや論理の飛躍・認知の傾向があれば、優しく指摘する
+2. 強みと資源：効果的だった行動や対処法を具体的に認める
+3. 来週への提案：「来週試したいこと」を踏まえた1〜2個の具体的なアドバイス
+
+# 口調
+寄り添いのある温かいトーン。断定を避け、問いかけを自然に使う。400〜600文字程度。`;
+
+let lineChart=null,radarChart=null,currentPeriod=4;
+let currentEditWeek='';
+let calYear=0,calMonth=0;
+let currentUser='';
+
+// ============================================================
+// ユーティリティ
+// ============================================================
+function weekKey(date){const d=new Date(date);d.setHours(0,0,0,0);const day=d.getDay();d.setDate(d.getDate()-(day===0?6:day-1));return d.toISOString().slice(0,10);}
+function fmtWeek(k){const s=new Date(k),e=new Date(s);e.setDate(e.getDate()+6);const f=d=>`${d.getMonth()+1}/${d.getDate()}`;return`${s.getFullYear()}年 ${f(s)}〜${f(e)}`;}
+function nowWeekKey(){return weekKey(new Date());}
+function avg(obj){const v=Object.values(obj);return v.reduce((a,b)=>a+b,0)/v.length;}
+function esc(s){if(!s)return'';return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/\n/g,'<br>');}
+
+// ============================================================
+// Toast
+// ============================================================
+let toastTimer=null;
+function toast(msg,ms=2600){clearTimeout(toastTimer);const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');toastTimer=setTimeout(()=>el.classList.remove('show'),ms);}
+
+// ============================================================
+// Dialog
+// ============================================================
+function openDialog(id){document.getElementById(id).classList.add('open');}
+function closeDialog(id){document.getElementById(id).classList.remove('open');}
+
+// ============================================================
+// ユーザー管理
+// ============================================================
+function dk(key){return`mt_${currentUser}_${key}`;}
+function loadEntries(){try{return JSON.parse(localStorage.getItem(dk('entries'))||'[]');}catch{return[];}}
+function storeEntries(arr){localStorage.setItem(dk('entries'),JSON.stringify(arr));}
+function loadTemplate(){return localStorage.getItem(dk('template'))||DEFAULT_TEMPLATE;}
+function saveTemplate(){localStorage.setItem(dk('template'),document.getElementById('prompt-template').value);}
+function isClearedWeek(wk){return localStorage.getItem(dk('cleared'))===wk;}
+function setClearedWeek(wk){localStorage.setItem(dk('cleared'),wk);}
+function clearClearedWeek(){localStorage.removeItem(dk('cleared'));}
+
+function setupUser(){
+  const name=document.getElementById('username-input').value.trim();
+  if(!name){document.getElementById('username-input').focus();return;}
+  localStorage.setItem('mt_current_user',name);
+  currentUser=name;
+  closeDialog('user-modal');
+  initApp();
+}
+
+function openSwitchUserDialog(){
+  document.getElementById('switch-username-input').value='';
+  openDialog('switch-user-dialog');
+}
+function doSwitchUser(){
+  const name=document.getElementById('switch-username-input').value.trim();
+  if(!name){toast('⚠️ ユーザー名を入力してください');return;}
+  localStorage.setItem('mt_current_user',name);
+  currentUser=name;
+  closeDialog('switch-user-dialog');
+  currentEditWeek=nowWeekKey();
+  initApp();
+  toast(`👤 ${name} に切り替えました`);
+}
+
+function doDeleteAll(){localStorage.removeItem(dk('entries'));closeDialog('delete-all-dialog');toast('🗑 全データを削除しました');renderLogList();}
+
+// ============================================================
+// Calendar
+// ============================================================
+function openWeekPicker(){const d=new Date(currentEditWeek);calYear=d.getFullYear();calMonth=d.getMonth();renderCalendar();document.getElementById('cal-backdrop').classList.add('open');}
+function closeWeekPicker(){document.getElementById('cal-backdrop').classList.remove('open');}
+function calChangeMonth(delta){calMonth+=delta;if(calMonth>11){calMonth=0;calYear++;}if(calMonth<0){calMonth=11;calYear--;}renderCalendar();}
+function renderCalendar(){
+  const entryKeys=new Set(loadEntries().map(e=>e.weekKey));
+  const today=new Date();today.setHours(0,0,0,0);
+  const first=new Date(calYear,calMonth,1),last=new Date(calYear,calMonth+1,0);
+  const start=new Date(first);const dow=start.getDay();start.setDate(start.getDate()-(dow===0?6:dow-1));
+  let html='',cur=new Date(start);
+  for(let w=0;w<6;w++){
+    if(w>0&&cur>last)break;
+    const wkStr=weekKey(new Date(cur));const hasData=entryKeys.has(wkStr);
+    html+=`<div class="cal-week-row${wkStr===currentEditWeek?' cal-selected':''}${wkStr===nowWeekKey()?' cal-current':''}" onclick="selectWeek('${wkStr}')">`;
+    for(let d=0;d<7;d++){const inM=cur.getMonth()===calMonth;const isToday=cur.getTime()===today.getTime();html+=`<span class="cal-day${!inM?' other-month':''}${isToday?' is-today':''}">${cur.getDate()}</span>`;cur.setDate(cur.getDate()+1);}
+    html+=`<span class="cal-dot">${hasData?'●':''}</span></div>`;
+  }
+  document.getElementById('cal-grid').innerHTML=html;
+  document.getElementById('cal-month-lbl').textContent=`${calYear}年${calMonth+1}月`;
+}
+
+function selectWeek(wk){
+  currentEditWeek=wk;
+  if(!isClearedWeek(wk)){const entry=loadEntries().find(e=>e.weekKey===wk);if(entry)fillForm(entry);else{renderSliders();resetTags();clearTextareas();}}
+  else{renderSliders();resetTags();clearTextareas();}
+  updateHeaderWeek();updateInputTitle();showPrevGoal();
+  closeWeekPicker();
+}
+function updateHeaderWeek(){
+  const isNow=currentEditWeek===nowWeekKey();
+  const pill=document.getElementById('week-display');
+  pill.textContent=fmtWeek(currentEditWeek)+(isNow?'':' ✏');
+  pill.classList.toggle('other-week',!isNow);
+}
+
+// ============================================================
+// Streak
+// ============================================================
+function calcStreak(){
+  const keys=new Set(loadEntries().map(e=>e.weekKey));
+  let streak=0,d=new Date(nowWeekKey());
+  while(keys.has(weekKey(d))){streak++;d.setDate(d.getDate()-7);}
+  return streak;
+}
+function updateStreak(){
+  const s=calcStreak();const el=document.getElementById('streak-badge');
+  if(s>=2){el.textContent=`🔥 ${s}週連続`;el.style.display='';}else{el.style.display='none';}
+}
+
+// ============================================================
+// Tabs
+// ============================================================
+function switchTab(name){
+  document.querySelectorAll('.tab-content').forEach(el=>el.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(el=>el.classList.remove('active'));
+  document.getElementById('tab-'+name).classList.add('active');
+  const idx={input:0,prompt:1,chart:2,log:3,data:4}[name];
+  document.querySelectorAll('.tab-btn')[idx].classList.add('active');
+  if(name==='chart')renderCharts();
+  if(name==='log')renderLogList();
+  if(name==='prompt')initPromptTab();
+  if(name==='data')document.getElementById('current-user-label').textContent=currentUser;
+}
+
+// ============================================================
+// Sliders
+// ============================================================
+function gradBg(v){const p=((v-1)/4)*100;return`linear-gradient(to right,var(--primary) 0%,var(--primary) ${p}%,var(--border) ${p}%,var(--border) 100%)`;}
+function valLabel(v){return['','😢 1','😕 2','😐 3','🙂 4','😄 5'][v]||v;}
+function renderSliders(scores={}){
+  document.getElementById('sliders').innerHTML=FIELDS.map(f=>{const v=scores[f.id]??3;return`<div class="slider-item"><div class="slider-header"><span class="slider-label">${f.emoji} ${f.label}</span><span class="slider-value" id="sv-${f.id}">${valLabel(v)}</span></div><input type="range" min="1" max="5" value="${v}" id="sl-${f.id}" oninput="onSlide('${f.id}',this.value)" style="background:${gradBg(v)}"><div class="slider-ends"><span>${f.lo}</span><span>ふつう</span><span>${f.hi}</span></div></div>`;}).join('');
+}
+function onSlide(id,raw){const v=parseInt(raw);document.getElementById('sv-'+id).textContent=valLabel(v);document.getElementById('sl-'+id).style.background=gradBg(v);}
+
+// ============================================================
+// Stress tags
+// ============================================================
+function toggleTag(el,type){
+  el.classList.toggle('selected');
+  if(type==='other'){const inp=document.getElementById('other-input');inp.classList.toggle('visible',el.classList.contains('selected'));if(!el.classList.contains('selected'))inp.value='';}
+}
+function resetTags(){document.querySelectorAll('.stress-tag').forEach(el=>el.classList.remove('selected'));const inp=document.getElementById('other-input');inp.classList.remove('visible');inp.value='';}
+function getSelectedTags(){return[...document.querySelectorAll('.stress-tag.selected')].map(el=>el.dataset.tag);}
+function setSelectedTags(tags=[]){document.querySelectorAll('.stress-tag').forEach(el=>el.classList.toggle('selected',tags.includes(el.dataset.tag)));const hasOther=tags.includes('その他');const inp=document.getElementById('other-input');inp.classList.toggle('visible',hasOther);}
+
+// ============================================================
+// Previous week goal
+// ============================================================
+function showPrevGoal(){
+  const d=new Date(currentEditWeek);d.setDate(d.getDate()-7);
+  const prevEntry=loadEntries().find(e=>e.weekKey===weekKey(d));
+  const goal=prevEntry?.text?.nextWeek?.trim()||'';
+  const banner=document.getElementById('prev-goal-banner');
+  if(!goal){banner.style.display='none';return;}
+  document.getElementById('prev-goal-text').textContent=goal;
+  banner.style.display='';
+  // Restore saved rating for current week
+  const curEntry=loadEntries().find(e=>e.weekKey===currentEditWeek);
+  const saved=curEntry?.prevGoalAchieved||'';
+  document.querySelectorAll('.goal-rating-btn').forEach(b=>b.classList.toggle('selected',b.dataset.val===saved));
+}
+function setGoalRating(btn){
+  document.querySelectorAll('.goal-rating-btn').forEach(b=>b.classList.remove('selected'));
+  btn.classList.add('selected');
+  // Persist immediately
+  const entries=loadEntries();const i=entries.findIndex(e=>e.weekKey===currentEditWeek);
+  if(i>=0){entries[i].prevGoalAchieved=btn.dataset.val;storeEntries(entries);}
+}
+
+// ============================================================
+// Form read / write / reset
+// ============================================================
+function readForm(){
+  const scores={};FIELDS.forEach(f=>{scores[f.id]=parseInt(document.getElementById('sl-'+f.id).value);});
+  return{scores,stressTags:getSelectedTags(),stressTagOther:document.getElementById('other-input').value,
+    text:{events:document.getElementById('t-events').value,peaks:document.getElementById('t-peaks').value,
+    stressDetail:document.getElementById('t-stress-detail').value,interp:document.getElementById('t-interp').value,
+    coping:document.getElementById('t-coping').value,nextWeek:document.getElementById('t-next').value}};
+}
+function fillForm(entry){
+  renderSliders(entry.scores);setSelectedTags(entry.stressTags||[]);
+  if(entry.stressTagOther)document.getElementById('other-input').value=entry.stressTagOther;
+  document.getElementById('t-events').value=entry.text.events||'';
+  document.getElementById('t-peaks').value=entry.text.peaks||'';
+  document.getElementById('t-stress-detail').value=entry.text.stressDetail||'';
+  document.getElementById('t-interp').value=entry.text.interp||'';
+  document.getElementById('t-coping').value=entry.text.coping||'';
+  document.getElementById('t-next').value=entry.text.nextWeek||'';
+}
+function clearTextareas(){['t-events','t-peaks','t-stress-detail','t-interp','t-coping','t-next'].forEach(id=>document.getElementById(id).value='');}
+function doReset(){
+  renderSliders();resetTags();clearTextareas();
+  setClearedWeek(currentEditWeek); // フォームを再ロードしないようにマーク
+  closeDialog('reset-dialog');toast('↺ フォームをリセットしました');
+}
+
+// ============================================================
+// Save
+// ============================================================
+function saveEntry(){
+  clearClearedWeek(); // 保存したらクリア済みフラグを解除
+  const{scores,stressTags,stressTagOther,text}=readForm();
+  const entries=loadEntries();const idx=entries.findIndex(e=>e.weekKey===currentEditWeek);
+  const existing=idx>=0?entries[idx]:{};
+  const entry={weekKey:currentEditWeek,savedAt:new Date().toISOString(),scores,stressTags,stressTagOther,text,prevGoalAchieved:existing.prevGoalAchieved||''};
+  if(idx>=0)entries[idx]=entry;else entries.unshift(entry);
+  storeEntries(entries);updateInputTitle();updateStreak();
+  // Save animation
+  const btn=document.getElementById('save-btn');btn.classList.remove('save-pop');void btn.offsetWidth;btn.classList.add('save-pop');
+  toast('✅ 保存しました');return entry;
+}
+function updateInputTitle(){
+  const existing=loadEntries().find(e=>e.weekKey===currentEditWeek);
+  const isNow=currentEditWeek===nowWeekKey();
+  const week=isNow?'今週':'この週';
+  document.getElementById('input-title').textContent=existing?`✏️ ${week}の記録（編集中）`:`📝 ${week}の記録（新規）`;
+}
+
+// ============================================================
+// Share result
+// ============================================================
+function shareResult(){
+  const{scores,stressTags,stressTagOther,text}=readForm();
+  const allTags=stressTags.map(t=>t==='その他'&&stressTagOther?`その他（${stressTagOther}）`:t);
+  const lines=[`【週次メンタルレポート】${fmtWeek(currentEditWeek)}`,'','■ スコア',...FIELDS.map(f=>`  ${f.emoji} ${f.label}: ${scores[f.id]}/5`),''];
+  if(allTags.length)lines.push('■ ストレス要因',`  ${allTags.join(' / ')}`,'');
+  [{label:'今週の出来事',val:text.events},{label:'良かった瞬間',val:text.peaks},{label:'ストレスの具体',val:text.stressDetail},{label:'自分なりの解釈',val:text.interp},{label:'対処法',val:text.coping},{label:'来週試したいこと',val:text.nextWeek}]
+    .filter(f=>f.val&&f.val.trim()).forEach(f=>lines.push(`■ ${f.label}`,f.val.trim(),''));
+  const txt=lines.join('\n');
+  if(navigator.clipboard)navigator.clipboard.writeText(txt).then(()=>toast('📋 クリップボードにコピーしました')).catch(()=>fbCopy(txt));
+  else fbCopy(txt);
+}
+function fbCopy(text){const ta=document.createElement('textarea');ta.value=text;ta.style.cssText='position:fixed;opacity:0;';document.body.appendChild(ta);ta.select();try{document.execCommand('copy');toast('📋 コピーしました');}catch{toast('⚠️ コピーに失敗しました');}document.body.removeChild(ta);}
+
+// ============================================================
+// Prompt tab
+// ============================================================
+function initPromptTab(){
+  document.getElementById('prompt-template').value=loadTemplate();
+  const entries=loadEntries();
+  const sel=document.getElementById('prompt-week-select');
+  if(!entries.length){sel.innerHTML='<option>記録がありません</option>';return;}
+  sel.innerHTML=entries.map(e=>`<option value="${e.weekKey}"${e.weekKey===currentEditWeek?' selected':''}>${fmtWeek(e.weekKey)}</option>`).join('');
+  document.getElementById('prompt-output-card').style.display='none';
+}
+function buildPromptOutput(){
+  const wk=document.getElementById('prompt-week-select').value;
+  const entry=loadEntries().find(e=>e.weekKey===wk);
+  if(!entry){toast('⚠️ データが見つかりません');return;}
+  const template=document.getElementById('prompt-template').value;
+  const s=entry.scores,t=entry.text;
+  const allTags=(entry.stressTags||[]).map(tag=>tag==='その他'&&entry.stressTagOther?`その他（${entry.stressTagOther}）`:tag);
+  const ratingLabel={done:'✅ できた',partial:'🔶 まあまあ',not:'❌ できなかった','':'未回答'};
+  const data=`
+---
+
+# 今週のセルフレポート（${fmtWeek(wk)}）
+
+## スコア（1〜5点）
+- 全体的な気分: ${s.mood}/5
+- エネルギー・活力: ${s.energy}/5
+- 睡眠の質: ${s.sleep}/5
+- 人とのつながり感: ${s.connection}/5
+- 何かに没頭できたか: ${s.engagement}/5
+- やるべきことへの取り組み: ${s.productivity}/5
+${allTags.length?`\n## ストレス要因\n${allTags.join('、')}`:''}
+${t.events?`\n## 今週の出来事\n${t.events}`:''}
+${t.peaks?`\n## 良かった瞬間\n${t.peaks}`:''}
+${t.stressDetail?`\n## ストレスの具体\n${t.stressDetail}`:''}
+${t.interp?`\n## 自分なりの解釈\n${t.interp}`:''}
+${t.coping?`\n## 今週使った対処法\n${t.coping}`:''}
+${t.nextWeek?`\n## 来週試したいこと\n${t.nextWeek}`:''}
+${entry.prevGoalAchieved?`\n## 前週の目標の達成度\n${ratingLabel[entry.prevGoalAchieved]||''}`:''}`
+  document.getElementById('prompt-output').value=template+data;
+  document.getElementById('prompt-output-card').style.display='';
+  document.getElementById('prompt-output').scrollTop=0;
+}
+function copyPrompt(){
+  const txt=document.getElementById('prompt-output').value;
+  if(!txt){toast('⚠️ まずプロンプトを生成してください');return;}
+  if(navigator.clipboard)navigator.clipboard.writeText(txt).then(()=>toast('📋 プロンプトをコピーしました')).catch(()=>fbCopy(txt));
+  else fbCopy(txt);
+}
+
+// ============================================================
+// Charts
+// ============================================================
+function setPeriod(n,btn){currentPeriod=n;document.querySelectorAll('.period-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');renderCharts();}
+function renderCharts(){
+  const all=loadEntries();if(!all.length)return;
+  let entries=[...all].sort((a,b)=>a.weekKey.localeCompare(b.weekKey));
+  if(currentPeriod>0)entries=entries.slice(-currentPeriod);
+  drawLineChart(entries);drawRadarChart(all[0]);
+}
+function drawLineChart(entries){
+  const ctx=document.getElementById('line-chart').getContext('2d');
+  if(lineChart)lineChart.destroy();
+  lineChart=new Chart(ctx,{type:'line',data:{labels:entries.map(e=>fmtWeek(e.weekKey).replace(/^\d{4}年 /,'')),datasets:FIELDS.map(f=>({label:f.emoji+' '+f.label,data:entries.map(e=>e.scores[f.id]),borderColor:COLORS[f.id],backgroundColor:COLORS[f.id]+'22',borderWidth:2.2,pointRadius:4,pointHoverRadius:6,tension:.35,fill:false}))},options:{responsive:true,maintainAspectRatio:false,scales:{y:{min:1,max:5,ticks:{stepSize:1,callback:v=>(['','😢','😕','😐','🙂','😄'][v]||v)},grid:{color:'rgba(0,0,0,.04)'}},x:{ticks:{font:{size:10}},grid:{display:false}}},plugins:{legend:{position:'bottom',labels:{font:{size:10},usePointStyle:true,pointStyleWidth:9,boxHeight:9}},tooltip:{callbacks:{label:ctx=>` ${ctx.dataset.label}: ${ctx.raw}/5`}}}}});
+}
+function drawRadarChart(entry){
+  if(!entry)return;
+  const ctx=document.getElementById('radar-chart').getContext('2d');
+  if(radarChart)radarChart.destroy();
+  radarChart=new Chart(ctx,{type:'radar',data:{labels:PERMA_LABELS,datasets:[{label:fmtWeek(entry.weekKey),data:PERMA_MAP.map(k=>entry.scores[k]),borderColor:'#6366f1',backgroundColor:'rgba(99,102,241,.18)',borderWidth:2.2,pointRadius:4,pointBackgroundColor:'#6366f1'}]},options:{responsive:true,maintainAspectRatio:false,scales:{r:{min:0,max:5,ticks:{stepSize:1,display:false},grid:{color:'rgba(0,0,0,.07)'},pointLabels:{font:{size:12}}}},plugins:{legend:{display:false}}}});
+}
+
+// ============================================================
+// Log
+// ============================================================
+function renderLogList(){
+  const entries=loadEntries();const container=document.getElementById('log-list');
+  if(!entries.length){container.innerHTML=`<div class="empty-state"><div class="empty-icon">📋</div><p>まだ記録がありません。<br>「入力」タブから最初の記録を作りましょう。</p></div>`;return;}
+  container.innerHTML=entries.map((e,i)=>`<div class="log-item"><div class="log-header" onclick="toggleLog(${i})"><div><div class="log-title">${fmtWeek(e.weekKey)}</div><div class="log-sub">平均 ${avg(e.scores).toFixed(1)} / ${e.prevGoalAchieved?'🎯 目標:'+{done:'達成',partial:'まあまあ',not:'未達'}[e.prevGoalAchieved]:''}</div></div><div style="display:flex;align-items:center;gap:8px;flex-shrink:0;"><div class="score-badges">${FIELDS.map(f=>`<span class="s-badge" style="color:${COLORS[f.id]}">${f.emoji}${e.scores[f.id]}</span>`).join('')}</div><span id="ti-${i}" style="color:var(--text-secondary);font-size:14px;">▼</span></div></div><div class="log-body" id="lb-${i}">${buildLogBody(e)}</div></div>`).join('');
+}
+function buildLogBody(e){
+  let html='';
+  const tags=(e.stressTags||[]).map(t=>t==='その他'&&e.stressTagOther?`その他（${e.stressTagOther}）`:t);
+  if(tags.length)html+=`<div class="log-sect"><h4>ストレス要因</h4><div class="stress-badges">${tags.map(t=>`<span class="stress-badge">${t}</span>`).join('')}</div></div>`;
+  [{label:'今週の出来事',val:e.text.events},{label:'良かった瞬間',val:e.text.peaks},{label:'ストレスの具体',val:e.text.stressDetail},{label:'自分なりの解釈',val:e.text.interp},{label:'対処法',val:e.text.coping},{label:'来週試したいこと',val:e.text.nextWeek}].filter(s=>s.val&&s.val.trim()).forEach(s=>{html+=`<div class="log-sect"><h4>${s.label}</h4><p>${esc(s.val)}</p></div>`;});
+  return html||'<p style="font-size:13px;color:var(--text-secondary);padding-top:10px;">詳細な記録はありません</p>';
+}
+function toggleLog(i){const b=document.getElementById('lb-'+i),ic=document.getElementById('ti-'+i);b.classList.toggle('open');ic.textContent=b.classList.contains('open')?'▲':'▼';}
+
+// ============================================================
+// Export / Import
+// ============================================================
+function exportJSON(){
+  const entries=loadEntries();if(!entries.length){toast('エクスポートできるデータがありません');return;}
+  const blob=new Blob([JSON.stringify({exported_at:new Date().toISOString(),user:currentUser,entries},null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob),a=document.createElement('a');
+  a.href=url;a.download=`mental-tracker-${currentUser}-${new Date().toISOString().slice(0,10)}.json`;a.click();URL.revokeObjectURL(url);
+  toast('📤 エクスポートしました');
+}
+function importJSON(event){
+  const file=event.target.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const data=JSON.parse(e.target.result);const imported=data.entries||data;
+      if(!Array.isArray(imported))throw new Error('フォーマットが不正です');
+      const existing=loadEntries();const merged=[...existing];
+      let added=0,updated=0;
+      imported.forEach(entry=>{if(!entry.weekKey||!entry.scores)return;const idx=merged.findIndex(e=>e.weekKey===entry.weekKey);if(idx>=0){merged[idx]=entry;updated++;}else{merged.unshift(entry);added++;}});
+      merged.sort((a,b)=>b.weekKey.localeCompare(a.weekKey));storeEntries(merged);
+      toast(`✅ インポート完了（新規:${added}件、更新:${updated}件）`,3500);event.target.value='';
+    }catch(err){toast('❌ インポートエラー: '+err.message,4000);}
+  };reader.readAsText(file);
+}
+
+// ============================================================
+// Init
+// ============================================================
+function initApp(){
+  currentEditWeek=nowWeekKey();
+  const existing=loadEntries().find(e=>e.weekKey===currentEditWeek);
+  if(existing&&!isClearedWeek(currentEditWeek))fillForm(existing);else renderSliders();
+  updateHeaderWeek();updateInputTitle();showPrevGoal();updateStreak();
+  document.getElementById('current-user-label').textContent=currentUser;
+}
+
+function init(){
+  const saved=localStorage.getItem('mt_current_user');
+  if(saved){currentUser=saved;closeDialog('user-modal');initApp();}
+  else{openDialog('user-modal');}
+  // Enter キーでユーザー設定確定
+  document.getElementById('username-input').addEventListener('keydown',e=>{if(e.key==='Enter')setupUser();});
+  document.getElementById('switch-username-input').addEventListener('keydown',e=>{if(e.key==='Enter')doSwitchUser();});
+}
+init();
+</script>
+</body>
+</html>
